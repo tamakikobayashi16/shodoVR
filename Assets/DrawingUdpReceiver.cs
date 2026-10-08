@@ -6,6 +6,7 @@ using System.Net.Sockets;
 using System.Text;
 using System.Threading;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class DrawingUdpReceiver : MonoBehaviour
 {
@@ -15,6 +16,9 @@ public class DrawingUdpReceiver : MonoBehaviour
     public Vector3 positionOffset;
     public float positionScale = 1f;
     public int maxPacketsPerFrame = 1000;
+
+    public UnityEvent experimentEnded = new UnityEvent();
+    public bool HasExperimentEnded { get; private set; }
 
     [Serializable]
     private class Packet
@@ -86,14 +90,22 @@ public class DrawingUdpReceiver : MonoBehaviour
         if (session != packet.session)
         {
             ClearAll();
+            HasExperimentEnded = false;
             session = packet.session;
             lastSequence = -1;
         }
         if (packet.sequence <= lastSequence) return;
         lastSequence = packet.sequence;
 
+        if (HasExperimentEnded) return;
+
         switch (packet.eventType)
         {
+            case "experimentEnd":
+                HasExperimentEnded = true;
+                Debug.Log("Received experimentEnd: drawing experiment finished.", this);
+                experimentEnded.Invoke();
+                break;
             case "clearCharacter":
                 ClearCharacter(packet.character);
                 break;
@@ -162,6 +174,7 @@ public class DrawingUdpReceiver : MonoBehaviour
         worker = null;
         while (incoming.TryDequeue(out _)) { }
         ClearAll();
+        HasExperimentEnded = false;
         session = null;
         lastSequence = -1;
     }

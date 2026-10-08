@@ -26,6 +26,7 @@ public class PenPosi : MonoBehaviour
     private LineRenderer currentLine;
     private Vector3 lastPosition;
     private bool wasDrawing;
+    private bool experimentEnded;
     private int udpCharacter;
     private int udpStroke;
 
@@ -39,6 +40,15 @@ public class PenPosi : MonoBehaviour
 
     private void Update()
     {
+        if (experimentEnded) return;
+        var keyboard = Keyboard.current;
+        if (keyboard != null &&
+            (keyboard.enterKey.wasPressedThisFrame || keyboard.numpadEnterKey.wasPressedThisFrame))
+        {
+            FinishExperiment();
+            return;
+        }
+
         var pen = Pen.current;
         if (pen == null) return;
 
@@ -58,6 +68,23 @@ public class PenPosi : MonoBehaviour
         if (!isDrawing && currentLine != null) EndStroke(position, pressure);
 
         wasDrawing = isDrawing;
+    }
+
+    public void FinishExperiment()
+    {
+        if (experimentEnded) return;
+        if (currentLine != null) EndStroke(lastPosition, 0f);
+        Send("experimentEnd", Vector3.zero);
+        experimentEnded = true;
+        wasDrawing = false;
+        if (penTipSphere != null) penTipSphere.gameObject.SetActive(false);
+        if (logger != null)
+        {
+            logger.eventName = "ExperimentEnd";
+            logger.Log(lastPosition, 0f, false, "End");
+            logger.EndLogging();
+        }
+        Debug.Log("Drawing experiment finished.", this);
     }
 
     private Vector3 ToDrawingPosition(Vector2 position)

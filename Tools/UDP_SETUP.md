@@ -33,3 +33,11 @@ Space で次の文字、R で現在の文字を消去すると受信側の線も
 Tools/receive_drawing.py は任意の診断用受信サンプル（Python 3）。Unity受信と同じポートで同時起動しない。
 
 検証: Python受信は実際のlocalhost UDPで不正パケット後も座標を受信できることを確認済み。Unity Editorがこのクラウドにないため、C#のコンパイル・Unity描画・2台のPC間通信は未検証。RayDraw / AirDraw / HmdTracker の既存処理は変更していない。
+
+## 全体の終了
+
+送信側で Enter（テンキーEnterも可）を押すと、描画中なら strokeEnd を送ってから experimentEnd を1回送る。ペンタブ未接続でも終了可能。以後の描画・キーによる文字変更・ログ記録は停止し、CSVを閉じる。Unity自体は終了せず、線を残す。再開はPlay Modeを終了してから再度開始する。
+
+experimentEnd の character は最後の現在文字番号。stroke は次に使用する画番号（描画中の画を閉じた場合はその番号+1）。x/y/z/pressure は0で座標として扱わない。
+
+受信側は HasExperimentEnded を true にし、Inspector の Experiment Ended（UnityEvent）を呼ぶ。終了UI等を登録できる。同じセッションの後続描画は無視し、線は保持する。新しいセッションで解除する。終了通知もUDPなので未達の可能性はあり、確実な終了保証にはACKと再送が必要。

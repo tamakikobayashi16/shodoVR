@@ -54,7 +54,13 @@ public class Logger : MonoBehaviour
 
     private void OnApplicationQuit()
     {
+        EndLogging();
+    }
+
+    public void EndLogging()
+    {
         writer?.Close();
+        writer = null;
     }
 
     public void BeginLogging()
