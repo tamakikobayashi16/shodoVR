@@ -5,6 +5,9 @@ using UnityEngine.InputSystem.Controls;
 
 public class PenPosi : MonoBehaviour
 {
+    public DrawingUdpSender udpSender;
+    private int udpCharacter;
+    private int udpStroke;
     public LineRenderer line;
     public Transform plane;
     
@@ -67,7 +70,7 @@ public class PenPosi : MonoBehaviour
         pressed = Pen.current.tip.isPressed;
 
         //èëÇ´íºÇµ
-        if (Keyboard.current.rKey.wasPressedThisFrame)
+        if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
         {
             foreach (GameObject obj in strokes)
             {
@@ -79,12 +82,15 @@ public class PenPosi : MonoBehaviour
             currentLine = null;
             firstPoint = true;
 
+            udpStroke = 0;
+            drawingBefore = false;
+            udpSender?.Send("PenTablet", "clearCharacter", Vector3.zero, udpCharacter, udpStroke);
             logger.redoCount++;
             logger.strokeNumber = 1;
             logger.eventName = "Redo";
         }
         //éüÇÃï∂éö
-        if (Keyboard.current.spaceKey.wasPressedThisFrame)
+        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
         {
 
             foreach (GameObject obj in strokes)
@@ -97,6 +103,10 @@ public class PenPosi : MonoBehaviour
             currentLine = null;
             firstPoint = true;
 
+            udpCharacter++;
+            udpStroke = 0;
+            drawingBefore = false;
+            udpSender?.Send("PenTablet", "nextCharacter", Vector3.zero, udpCharacter, udpStroke);
             logger.characterNumber++;
             logger.strokeNumber = 1;
             logger.eventName = "NextCharacter";
@@ -189,6 +199,7 @@ public class PenPosi : MonoBehaviour
                     currentLine.positionCount - 1,
                     p);
 
+                udpSender?.Send("PenTablet", "point", p, udpCharacter, udpStroke, pressure);
                 lastPos = p;
                 firstPoint = false;
             }
@@ -200,6 +211,8 @@ public class PenPosi : MonoBehaviour
             currentLine = null;
             firstPoint = true;
 
+            udpSender?.Send("PenTablet", "strokeEnd", p, udpCharacter, udpStroke, pressure);
+            udpStroke++;
             logger.strokeNumber++;
         }
 
