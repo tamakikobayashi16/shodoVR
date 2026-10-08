@@ -47,8 +47,6 @@ public class Logger : MonoBehaviour
             $"{eventName}");
 
         writer.Flush();
-        writer.Flush();
-        Debug.Log("1行書き込み");
 
         // イベントは1フレームだけ記録
         eventName = "None";

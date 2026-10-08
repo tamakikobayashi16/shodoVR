@@ -1,222 +1,135 @@
+using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.InputSystem;
-using System.Collections.Generic;
-using UnityEngine.InputSystem.Controls;
 
 public class PenPosi : MonoBehaviour
 {
+    [Header("Scene References")]
+    public LineRenderer line;
+    public Transform plane; // Retained for compatibility with existing scene references.
+    public GameObject linePrefab;
     public DrawingUdpSender udpSender;
+    [SerializeField] private Logger logger;
+    [SerializeField] private Transform penTipSphere;
+
+    [Header("Drawing")]
+    [SerializeField] private float drawScale = 1f;
+    [SerializeField] private float drawPressureThreshold = 0.05f;
+
+    private const float ScreenWidth = 1920f;
+    private const float ScreenHeight = 1080f;
+    private const float DrawingDepth = 9.5f;
+    private const float MinimumPointDistance = 0.01f;
+    private const float StrokeWidth = 0.3f;
+
+    private readonly List<GameObject> strokes = new List<GameObject>();
+    private LineRenderer currentLine;
+    private Vector3 lastPosition;
+    private bool wasDrawing;
     private int udpCharacter;
     private int udpStroke;
-    public LineRenderer line;
-    public Transform plane;
-    
 
-    [Header("Scale")]
-    [SerializeField]
-    private float drawScale = 1.0f;
-
-    [Header("Pressure")]
-    [SerializeField]
-    private float drawPressureThreshold = 0.05f;
-
-    [SerializeField]
-    private Logger logger;
-
-    public GameObject linePrefab;
-
-    private LineRenderer currentLine;
-    private List<GameObject> strokes = new List<GameObject>();
-
-    private Vector3 lastPos;
-    private Vector3 p;
-    private bool firstPoint = true;
-    private float wasPressure = 0f;
-
-
-
-    private float pressure;
-    private bool inRange;
-
-    private bool drawingNow;
-    private bool drawingBefore;
-    private bool pressed;
-
-    [Header("ペン先表示")]
-    [SerializeField]
-    private Transform penTipSphere;
-
-    void Start()
+    private void Start()
     {
+        if (line == null) return;
         line.positionCount = 0;
-
-        line.startWidth = 30f;
-        line.endWidth = 30f;
-
+        line.startWidth = line.endWidth = 30f;
         line.useWorldSpace = true;
     }
 
-    void Update()
+    private void Update()
     {
+        var pen = Pen.current;
+        if (pen == null) return;
 
-        if (Pen.current == null)
-            return;
+        float pressure = pen.pressure.ReadValue();
+        bool inRange = pen.inRange.isPressed;
+        bool isDrawing = pressure >= drawPressureThreshold;
+        Vector3 position = ToDrawingPosition(pen.position.ReadValue());
 
-        pressure = Pen.current.pressure.ReadValue();
-        inRange = Pen.current.inRange.isPressed;
+        HandleKeyboard();
+        UpdateCursor(position, inRange);
 
-        drawingNow = pressure >= drawPressureThreshold;
-        drawingBefore = wasPressure >= drawPressureThreshold;
-        pressed = Pen.current.tip.isPressed;
+        string penState = !inRange ? "OutOfRange" : isDrawing ? "Down" : "Hover";
+        logger?.Log(position, pressure, inRange, penState);
 
-        //書き直し
-        if (Keyboard.current != null && Keyboard.current.rKey.wasPressedThisFrame)
-        {
-            foreach (GameObject obj in strokes)
-            {
-                Destroy(obj);
-            }
+        if (isDrawing && !wasDrawing) BeginStroke();
+        if (isDrawing && currentLine != null) AddPoint(position, pressure);
+        if (!isDrawing && currentLine != null) EndStroke(position, pressure);
 
-            strokes.Clear();
+        wasDrawing = isDrawing;
+    }
 
-            currentLine = null;
-            firstPoint = true;
+    private Vector3 ToDrawingPosition(Vector2 position)
+    {
+        float x = (position.x - ScreenWidth / 2f) / (ScreenWidth / 2f);
+        float y = (position.y - ScreenHeight / 2f) / (ScreenHeight / 2f);
+        return new Vector3(x * drawScale * 1.920f, y * drawScale * 1.080f, DrawingDepth);
+    }
 
-            udpStroke = 0;
-            drawingBefore = false;
-            udpSender?.Send("PenTablet", "clearCharacter", Vector3.zero, udpCharacter, udpStroke);
-            logger.redoCount++;
-            logger.strokeNumber = 1;
-            logger.eventName = "Redo";
-        }
-        //次の文字
-        if (Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame)
-        {
+    private void HandleKeyboard()
+    {
+        var keyboard = Keyboard.current;
+        if (keyboard == null) return;
+        if (keyboard.rKey.wasPressedThisFrame) ResetCharacter(false);
+        if (keyboard.spaceKey.wasPressedThisFrame) ResetCharacter(true);
+    }
 
-            foreach (GameObject obj in strokes)
-            {
-                Destroy(obj);
-            }
+    private void ResetCharacter(bool advance)
+    {
+        foreach (var stroke in strokes) Destroy(stroke);
+        strokes.Clear();
+        currentLine = null;
+        wasDrawing = false;
+        udpStroke = 0;
+        if (advance) udpCharacter++;
 
-            strokes.Clear();
+        Send(advance ? "nextCharacter" : "clearCharacter", Vector3.zero);
+        if (logger == null) return;
+        if (advance) logger.characterNumber++;
+        else logger.redoCount++;
+        logger.strokeNumber = 1;
+        logger.eventName = advance ? "NextCharacter" : "Redo";
+    }
 
-            currentLine = null;
-            firstPoint = true;
+    private void UpdateCursor(Vector3 position, bool inRange)
+    {
+        if (penTipSphere == null) return;
+        penTipSphere.gameObject.SetActive(inRange);
+        if (inRange) penTipSphere.position = position;
+    }
 
-            udpCharacter++;
-            udpStroke = 0;
-            drawingBefore = false;
-            udpSender?.Send("PenTablet", "nextCharacter", Vector3.zero, udpCharacter, udpStroke);
-            logger.characterNumber++;
-            logger.strokeNumber = 1;
-            logger.eventName = "NextCharacter";
+    private void BeginStroke()
+    {
+        var stroke = Instantiate(linePrefab);
+        currentLine = stroke.GetComponent<LineRenderer>();
+        currentLine.positionCount = 0;
+        currentLine.startWidth = currentLine.endWidth = StrokeWidth;
+        strokes.Add(stroke);
+    }
 
-            
-        }
-        string penState;
+    private void AddPoint(Vector3 position, float pressure)
+    {
+        if (currentLine.positionCount > 0 &&
+            Vector3.Distance(position, lastPosition) <= MinimumPointDistance) return;
 
-            if (!inRange)
-                penState = "OutOfRange";
-            else if (drawingNow)
-                penState = "Down";
-            else
-                penState = "Hover";
+        int index = currentLine.positionCount;
+        currentLine.positionCount = index + 1;
+        currentLine.SetPosition(index, position);
+        Send("point", position, pressure);
+        lastPosition = position;
+    }
 
-            logger.Log(
+    private void EndStroke(Vector3 position, float pressure)
+    {
+        currentLine = null;
+        Send("strokeEnd", position, pressure);
+        udpStroke++;
+        if (logger != null) logger.strokeNumber++;
+    }
 
-                p,
-                pressure,
-                inRange,
-                penState
-            );
-
-        Vector2 pos = Pen.current.position.ReadValue();
-
-        // 実測値
-        float minX = 0f;
-        float maxX = 1920f;
-
-        float minY = 0f;
-        float maxY = 1080f;
-
-        // 0～1に正規化
-        float u = (pos.x - minX) / (maxX - minX);
-        float v = (pos.y - minY) / (maxY - minY);
-
-        float centerX = (minX + maxX) / 2f;
-        float centerY = (minY + maxY) / 2f;
-
-        float normX = (pos.x - centerX) / ((maxX - minX) / 2f);
-        float normY = (pos.y - centerY) / ((maxY - minY) / 2f);
-
-        p = new Vector3(
-            normX * drawScale * 1.920f,
-            normY * drawScale * 1.080f,
-            9.5f
-         );
-
-        
-
-        // カーソル表示
-        if (penTipSphere != null)
-        {
-            penTipSphere.gameObject.SetActive(inRange);
-
-            if (inRange)
-            {
-                penTipSphere.position = p;
-            }
-        }
-
-        
-        // 描画開始
-        
-
-        if (drawingNow && !drawingBefore)
-        {
-            GameObject obj = Instantiate(linePrefab);
-
-            currentLine = obj.GetComponent<LineRenderer>();
-
-            currentLine.positionCount = 0;
-            currentLine.startWidth = 0.3f;
-            currentLine.endWidth = 0.3f;
-
-            strokes.Add(obj);
-
-            firstPoint = true;
-        }
-
-        // 描画中
-        if (drawingNow && currentLine != null)
-        {
-            if (firstPoint ||
-                Vector3.Distance(p, lastPos) > 0.01f)
-            {
-                currentLine.positionCount++;
-
-                currentLine.SetPosition(
-                    currentLine.positionCount - 1,
-                    p);
-
-                udpSender?.Send("PenTablet", "point", p, udpCharacter, udpStroke, pressure);
-                lastPos = p;
-                firstPoint = false;
-            }
-        }
-
-        // ペンを離した
-        if (!drawingNow && currentLine != null)
-        {
-            currentLine = null;
-            firstPoint = true;
-
-            udpSender?.Send("PenTablet", "strokeEnd", p, udpCharacter, udpStroke, pressure);
-            udpStroke++;
-            logger.strokeNumber++;
-        }
-
-        wasPressure = pressure;
-        
+    private void Send(string eventType, Vector3 position, float pressure = 0f)
+    {
+        udpSender?.Send("PenTablet", eventType, position, udpCharacter, udpStroke, pressure);
     }
 }

@@ -71,49 +71,80 @@ public class DrawingUdpReceiver : MonoBehaviour
         }
         for (int i = 0; i < Mathf.Max(1, maxPacketsPerFrame) && incoming.TryDequeue(out var json); i++)
         {
-            Packet p;
-            try { p = JsonUtility.FromJson<Packet>(json); }
-            catch (ArgumentException) { continue; }
-            if (p == null || p.version != 1 || p.method != "PenTablet" || string.IsNullOrEmpty(p.session)) continue;
-            if (session != p.session)
-            {
-                ClearAll();
-                session = p.session;
-                lastSequence = -1;
-            }
-            if (p.sequence <= lastSequence) continue;
-            lastSequence = p.sequence;
-            if (p.eventType == "clearCharacter")
-            {
-                string prefix = p.character + ":";
-                var keys = new List<string>(lines.Keys);
-                foreach (var key in keys)
-                    if (key.StartsWith(prefix, StringComparison.Ordinal))
-                    { Destroy(lines[key].gameObject); lines.Remove(key); }
-            }
-            else if (p.eventType == "nextCharacter") ClearAll();
-            else if (p.eventType == "point")
-            {
-                if (!Finite(p.x) || !Finite(p.y) || !Finite(p.z)) continue;
-                string key = p.character + ":" + p.stroke;
-                if (!lines.TryGetValue(key, out var line))
-                {
-                    var obj = new GameObject("ReceivedStroke_" + key);
-                    obj.transform.SetParent(transform, false);
-                    line = obj.AddComponent<LineRenderer>();
-                    line.useWorldSpace = true;
-                    line.sharedMaterial = lineMaterial;
-                    line.startWidth = line.endWidth = lineWidth;
-                    line.positionCount = 0;
-                    line.numCapVertices = 8;
-                    lines.Add(key, line);
-                }
-                int index = line.positionCount;
-                line.positionCount = index + 1;
-                line.SetPosition(index, new Vector3(p.x, p.y, p.z) * positionScale + positionOffset);
-            }
-            // strokeEnd needs no action: each stroke already has its own line.
+            ProcessPacket(json);
         }
+    }
+
+    private void ProcessPacket(string json)
+    {
+        Packet packet;
+        try { packet = JsonUtility.FromJson<Packet>(json); }
+        catch (ArgumentException) { return; }
+        if (packet == null || packet.version != 1 || packet.method != "PenTablet" ||
+            string.IsNullOrEmpty(packet.session)) return;
+
+        if (session != packet.session)
+        {
+            ClearAll();
+            session = packet.session;
+            lastSequence = -1;
+        }
+        if (packet.sequence <= lastSequence) return;
+        lastSequence = packet.sequence;
+
+        switch (packet.eventType)
+        {
+            case "clearCharacter":
+                ClearCharacter(packet.character);
+                break;
+            case "nextCharacter":
+                ClearAll();
+                break;
+            case "point":
+                AddPoint(packet);
+                break;
+            // Each stroke has its own line, so strokeEnd requires no update.
+        }
+    }
+
+    private void ClearCharacter(int character)
+    {
+        string prefix = character + ":";
+        foreach (var key in new List<string>(lines.Keys))
+        {
+            if (!key.StartsWith(prefix, StringComparison.Ordinal)) continue;
+            Destroy(lines[key].gameObject);
+            lines.Remove(key);
+        }
+    }
+
+    private void AddPoint(Packet packet)
+    {
+        if (!Finite(packet.x) || !Finite(packet.y) || !Finite(packet.z)) return;
+        string key = packet.character + ":" + packet.stroke;
+        if (!lines.TryGetValue(key, out var line))
+        {
+            line = CreateLine(key);
+            lines.Add(key, line);
+        }
+
+        int index = line.positionCount;
+        line.positionCount = index + 1;
+        line.SetPosition(index,
+            new Vector3(packet.x, packet.y, packet.z) * positionScale + positionOffset);
+    }
+
+    private LineRenderer CreateLine(string key)
+    {
+        var obj = new GameObject("ReceivedStroke_" + key);
+        obj.transform.SetParent(transform, false);
+        var line = obj.AddComponent<LineRenderer>();
+        line.useWorldSpace = true;
+        line.sharedMaterial = lineMaterial;
+        line.startWidth = line.endWidth = lineWidth;
+        line.positionCount = 0;
+        line.numCapVertices = 8;
+        return line;
     }
 
     private static bool Finite(float value) { return !float.IsNaN(value) && !float.IsInfinity(value); }
