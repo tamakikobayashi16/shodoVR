@@ -29,6 +29,7 @@ public class PenPosi : MonoBehaviour
     private bool experimentEnded;
     private int udpCharacter;
     private int udpStroke;
+    private string activeTrial;
 
     private void Start()
     {
@@ -40,6 +41,20 @@ public class PenPosi : MonoBehaviour
 
     private void Update()
     {
+        if (udpSender != null && udpSender.requireSessionHandshake)
+        {
+            udpSender.DeviceReady = Pen.current != null && linePrefab != null && linePrefab.GetComponent<LineRenderer>() != null;
+            if (activeTrial != udpSender.TrialId)
+            {
+                activeTrial = udpSender.TrialId;
+                ResetTrial();
+            }
+            if (!udpSender.CanDraw)
+            {
+                if (penTipSphere != null) penTipSphere.gameObject.SetActive(false);
+                return;
+            }
+        }
         if (experimentEnded) return;
         var keyboard = Keyboard.current;
         if (keyboard != null &&
@@ -61,7 +76,7 @@ public class PenPosi : MonoBehaviour
         UpdateCursor(position, inRange);
 
         string penState = !inRange ? "OutOfRange" : isDrawing ? "Down" : "Hover";
-        logger?.Log(position, pressure, inRange, penState);
+        if (udpSender == null || !udpSender.requireSessionHandshake) logger?.Log(position, pressure, inRange, penState);
 
         if (isDrawing && !wasDrawing) BeginStroke();
         if (isDrawing && currentLine != null) AddPoint(position, pressure);
@@ -72,19 +87,36 @@ public class PenPosi : MonoBehaviour
 
     public void FinishExperiment()
     {
+        if (udpSender != null && udpSender.requireSessionHandshake && !udpSender.CanDraw) return;
         if (experimentEnded) return;
         if (currentLine != null) EndStroke(lastPosition, 0f);
         Send("experimentEnd", Vector3.zero);
         experimentEnded = true;
         wasDrawing = false;
         if (penTipSphere != null) penTipSphere.gameObject.SetActive(false);
-        if (logger != null)
+        if (logger != null && (udpSender == null || !udpSender.requireSessionHandshake))
         {
             logger.eventName = "ExperimentEnd";
             logger.Log(lastPosition, 0f, false, "End");
             logger.EndLogging();
         }
         Debug.Log("Drawing experiment finished.", this);
+    }
+
+    private void ResetTrial()
+    {
+        foreach (var stroke in strokes) Destroy(stroke);
+        strokes.Clear();
+        currentLine = null;
+        wasDrawing = false;
+        experimentEnded = false;
+        udpCharacter = udpStroke = 0;
+        if (line != null) line.positionCount = 0;
+        if (logger != null)
+        {
+            logger.characterNumber = logger.strokeNumber = 1;
+            logger.redoCount = 0;
+        }
     }
 
     private Vector3 ToDrawingPosition(Vector2 position)
