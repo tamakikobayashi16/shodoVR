@@ -1719,6 +1719,7 @@ GameObject:
   - component: {fileID: 1402797211}
   - component: {fileID: 1402797210}
   - component: {fileID: 1402797212}
+  - component: {fileID: 1402797213}
   m_Layer: 0
   m_Name: Pentab
   m_TagString: Untagged
@@ -1767,12 +1768,29 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   line: {fileID: 759211849}
   plane: {fileID: 84156590}
+  udpSender: {fileID: 1402797213}
   drawScale: 4
   drawPressureThreshold: 0.1
   logger: {fileID: 1697157806}
   linePrefab: {fileID: 6138759930115612123, guid: 378b72864be703545a5732dcab31a294,
     type: 3}
   penTipSphere: {fileID: 37130857}
+--- !u!114 &1402797213
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1402797209}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 37ecf8a060b349989c30187e162a6420, type: 3}
+  m_Name:
+  m_EditorClassIdentifier:
+  receiverIp: 127.0.0.1
+  receiverPort: 5005
+  requireSessionHandshake: 1
+  controlPort: 5006
 --- !u!1 &1629996163
 GameObject:
   m_ObjectHideFlags: 0

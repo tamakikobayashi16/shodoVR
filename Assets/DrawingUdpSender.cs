@@ -13,6 +13,10 @@ public class DrawingUdpSender : MonoBehaviour
     public int controlPort = 5006;
     public bool DeviceReady { get; set; }
     public string TrialId => requireSessionHandshake ? link?.State.trialId : session;
+    // Keep the finished model visible, but hide the surface during waiting, retry or disconnect.
+    public bool CanDisplayDrawingPlane => !requireSessionHandshake || (link != null && link.Connected &&
+        (link.State.phase == "drawing" || link.State.phase == "templateCompleted" ||
+         link.State.phase == "tracing" || link.State.phase == "completed"));
     public bool CanDraw => !requireSessionHandshake || (link != null && link.CanDraw &&
         link.LocalReady && DeviceReady && recorder != null && recorder.Error == null && sendError == null);
     RemoteTrialLink link;

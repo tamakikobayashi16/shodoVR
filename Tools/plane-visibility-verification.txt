@@ -1,0 +1,10 @@
+PASS: sample scene has plane and sender references
+PASS: plane hidden on startup without disabling input object
+PASS: connected plane stays hidden before readiness
+PASS: learner start signal reveals the plane
+PASS: completed template remains visible
+PASS: disconnect hides the plane
+PASS: retry returns to hidden waiting state
+PASS: standalone mode keeps surface visible
+PASS: disable restores original renderer visibility
+PLANE_VISIBILITY_PASS: 9 checks

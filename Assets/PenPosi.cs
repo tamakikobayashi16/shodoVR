@@ -6,7 +6,7 @@ public class PenPosi : MonoBehaviour
 {
     [Header("Scene References")]
     public LineRenderer line;
-    public Transform plane; // Retained for compatibility with existing scene references.
+    public Transform plane;
     public GameObject linePrefab;
     public DrawingUdpSender udpSender;
     [SerializeField] private Logger logger;
@@ -30,6 +30,35 @@ public class PenPosi : MonoBehaviour
     private int udpCharacter;
     private int udpStroke;
     private string activeTrial;
+    private Renderer[] planeRenderers;
+    private bool[] originalForceRenderingOff;
+
+    private void OnEnable()
+    {
+        if (udpSender == null) udpSender = GetComponent<DrawingUdpSender>();
+        planeRenderers = plane != null ? plane.GetComponentsInChildren<Renderer>(true) : new Renderer[0];
+        originalForceRenderingOff = new bool[planeRenderers.Length];
+        for (int i = 0; i < planeRenderers.Length; i++)
+            originalForceRenderingOff[i] = planeRenderers[i].forceRenderingOff;
+        UpdatePlaneVisibility();
+    }
+
+    private void UpdatePlaneVisibility()
+    {
+        bool visible = udpSender != null && udpSender.CanDisplayDrawingPlane;
+        // Do not deactivate the GameObject: it may also contain input/network components.
+        if (planeRenderers == null) return;
+        for (int i = 0; i < planeRenderers.Length; i++)
+            if (planeRenderers[i] != null)
+                planeRenderers[i].forceRenderingOff = !visible || originalForceRenderingOff[i];
+    }
+
+    private void OnDisable()
+    {
+        if (planeRenderers == null) return;
+        for (int i = 0; i < planeRenderers.Length; i++)
+            if (planeRenderers[i] != null) planeRenderers[i].forceRenderingOff = originalForceRenderingOff[i];
+    }
 
     private void Start()
     {
@@ -41,6 +70,12 @@ public class PenPosi : MonoBehaviour
 
     private void Update()
     {
+        UpdatePlaneVisibility();
+        if (udpSender == null)
+        {
+            if (penTipSphere != null) penTipSphere.gameObject.SetActive(false);
+            return;
+        }
         if (udpSender != null && udpSender.requireSessionHandshake)
         {
             udpSender.DeviceReady = Pen.current != null && linePrefab != null && linePrefab.GetComponent<LineRenderer>() != null;
